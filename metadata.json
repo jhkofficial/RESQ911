@@ -1,0 +1,6 @@
+{
+  "name": "RESQ.911 — National Disaster Intelligence & Response Platform",
+  "description": "Indonesian disaster intelligence and response coordination platform for government institutions and disaster response agencies. Transforming fragmented disaster information into unified operational intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
