@@ -43,7 +43,24 @@ Metode ini menggunakan web server bawaan Hostinger (LiteSpeed) untuk menyajikan 
 
 ---
 
-## 🚀 Opsi 2: Hostinger VPS / Cloud Server (Fullstack Node.js + Express)
+## ⚡ Opsi 2: Hostinger Git Deployment / Auto-Build (hbuilds)
+
+Jika Anda menggunakan fitur **Git Deployment / Auto-Build** bawaan Hostinger (yang menjalankan build langsung dari repositori GitHub/GitLab ke domain Anda seperti `resq911.serveon.live`):
+
+- **Penyebab Error Sebelumnya**: Paket `recharts` membutuhkan sub-dependensi `react-is`. Pada lingkungan clean build Hostinger (`hbuilds`), paket `react-is` belum tercantum secara eksplisit di `package.json`, sehingga rolldown/vite gagal me-resolve import tersebut.
+- **Perbaikan yang Dilakukan**:
+  1. `react-is` dan `@types/react-is` telah ditambahkan secara eksplisit ke dalam `package.json`.
+  2. `vite.config.ts` telah dikonfigurasi dengan `optimizeDeps: { include: ['react-is', 'recharts', 'leaflet', 'lucide-react'] }`.
+  3. Konfigurasi direktori ESM telah diubah menggunakan `fileURLToPath(import.meta.url)` yang kompatibel dengan seluruh versi Node.js di server Hostinger.
+- **Konfigurasi Build di hPanel Hostinger Git**:
+  - **Install Command**: `npm install`
+  - **Build Command**: `npm run build`
+  - **Output Directory**: `dist`
+
+---
+
+
+## 🚀 Opsi 3: Hostinger VPS / Cloud Server (Fullstack Node.js + Express)
 
 Jika Anda ingin menjalankan backend server `server.ts` secara live di Hostinger VPS (misal untuk integrasi Gemini API langsung dari server):
 
