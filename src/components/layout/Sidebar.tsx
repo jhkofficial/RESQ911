@@ -22,6 +22,13 @@ import {
   Sparkles,
   Hammer,
   CheckSquare,
+  Compass,
+  Truck,
+  MessageSquare,
+  PlusCircle,
+  FileCheck,
+  MapPin,
+  ListTodo,
 } from 'lucide-react';
 import { useDisaster } from '../../context/DisasterContext';
 
@@ -37,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
     stats,
     reportStats,
     intelligenceStats,
+    operationsMetrics,
+    teams,
     currentUser,
     filteredIncidents,
   } = useDisaster();
@@ -58,6 +67,96 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
       badge: `${filteredIncidents.length}`,
       badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
       section: 'OVERVIEW',
+    },
+    // MVP 4 Response Orchestration & Field Operations
+    {
+      id: 'response-center',
+      label: 'Pusat Komando Operasi',
+      sublabel: 'Command & Response Cockpit',
+      icon: Compass,
+      badge: operationsMetrics.activeMissions > 0 ? `${operationsMetrics.activeMissions} Misi` : null,
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'mission-planning',
+      label: 'Perencanaan Misi',
+      sublabel: 'Mission Planning Engine',
+      icon: PlusCircle,
+      badge: '+ Baru',
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'mission-authorization',
+      label: 'Meja Otorisasi Misi',
+      sublabel: 'Human Authorization Gate',
+      icon: FileCheck,
+      badge: operationsMetrics.pendingAuthorization > 0 ? `${operationsMetrics.pendingAuthorization} Antre` : null,
+      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/40',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'team-management',
+      label: 'Registri Tim Satgas',
+      sublabel: 'Multi-Agency Taskforces',
+      icon: Users,
+      badge: `${teams.length}`,
+      badgeColor: 'bg-blue-500/20 text-blue-300 border border-blue-500/40',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'resource-management',
+      label: 'Logistik & Sumber Daya',
+      sublabel: 'Fleet & Inventory Control',
+      icon: Truck,
+      badge: operationsMetrics.lowStockResources > 0 ? `${operationsMetrics.lowStockResources} Kritis` : null,
+      badgeColor: 'bg-orange-500/20 text-orange-300 border border-orange-500/40',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'field-workspace',
+      label: 'Workspace Lapangan',
+      sublabel: 'TRC SitRep & Sektor',
+      icon: Radio,
+      badge: 'Frontline',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'field-tasks',
+      label: 'Manajemen Tugas',
+      sublabel: 'Kanban & Timeline Progress',
+      icon: ListTodo,
+      badge: `${operationsMetrics.totalTasks}`,
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'operations-map',
+      label: 'Peta Geospasial Operasi',
+      sublabel: 'Tactical Deployment Layers',
+      icon: MapPin,
+      badge: 'GIS Live',
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'coordination-escalation',
+      label: 'Koordinasi & Eskalasi',
+      sublabel: 'Realtime Channels & Alerts',
+      icon: MessageSquare,
+      badge: operationsMetrics.openEscalations > 0 ? `${operationsMetrics.openEscalations} Kendala` : null,
+      badgeColor: 'bg-red-500/20 text-red-300 border border-red-500/40',
+      section: 'OPERASI LAPANGAN (MVP 4)',
+    },
+    {
+      id: 'mission-history',
+      label: 'Rekam Jejak Operasi',
+      sublabel: 'Immutable Audit Trail',
+      icon: History,
+      badge: null,
+      section: 'OPERASI LAPANGAN (MVP 4)',
     },
     // MVP 3 AI Intelligence & Decision Support Modules
     {
@@ -226,23 +325,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
     >
       {/* Top User Role Summary */}
       {!collapsed ? (
-        <div className="p-3.5 border-b border-[#12365C] bg-[#0a1c33]/40">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-            Hak Akses Operasional
+        <div className="p-3.5 border-b border-[#12365C] bg-[#0a1c33]/60">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+              Personel Aktif
+            </span>
+            {currentUser.nim && (
+              <span className="text-[10px] font-mono text-cyan-400 font-bold bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-500/40">
+                NIM: {currentUser.nim}
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-            <span className="text-xs font-bold text-white uppercase tracking-tight">
+          <div className="text-xs font-bold text-white truncate mt-1">
+            {currentUser.name}
+          </div>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_#00c8f8]"></span>
+            <span className="text-[11px] font-bold text-cyan-300 uppercase tracking-tight">
               {currentUser.role.replace('_', ' ')}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 truncate mt-0.5">{currentUser.agency}</p>
+          <p className="text-[10px] text-slate-400 truncate mt-0.5">{currentUser.agency}</p>
         </div>
       ) : (
         <div className="p-3 border-b border-[#12365C] flex justify-center">
           <span
             className="w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_8px_#00c8f8]"
-            title={currentUser.role}
+            title={`${currentUser.name} (${currentUser.nim || ''}) - ${currentUser.role}`}
           ></span>
         </div>
       )}

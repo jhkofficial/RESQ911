@@ -33,6 +33,18 @@ import { IncidentDetailModal } from './components/incidents/IncidentDetailModal'
 import { NewIncidentModal } from './components/incidents/NewIncidentModal';
 import { LoginPage } from './components/auth/LoginPage';
 
+// MVP 4 Operations Components
+import { ResponseCommandCenter } from './components/operations/ResponseCommandCenter';
+import { MissionPlanningEngine } from './components/operations/MissionPlanningEngine';
+import { MissionAuthorizationCenter } from './components/operations/MissionAuthorizationCenter';
+import { TeamManagement } from './components/operations/TeamManagement';
+import { ResourceLogisticsManagement } from './components/operations/ResourceLogisticsManagement';
+import { FieldOperationsWorkspace } from './components/operations/FieldOperationsWorkspace';
+import { FieldTaskManagement } from './components/operations/FieldTaskManagement';
+import { OperationsMap } from './components/operations/OperationsMap';
+import { CoordinationEscalationModule } from './components/operations/CoordinationEscalationModule';
+import { MissionHistoryModule } from './components/operations/MissionHistoryModule';
+
 const MainShell: React.FC = () => {
   const { isLoggedIn, activeTab, activeIncident, setActiveIncident, setActiveTab } = useDisaster();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -66,6 +78,18 @@ const MainShell: React.FC = () => {
             {activeTab === 'incidents' && (
               <IncidentManagement onOpenNewModal={() => setIsNewIncidentModalOpen(true)} />
             )}
+
+            {/* MVP 4 Response Orchestration & Field Operations Modules */}
+            {activeTab === 'response-center' && <ResponseCommandCenter />}
+            {activeTab === 'mission-planning' && <MissionPlanningEngine />}
+            {activeTab === 'mission-authorization' && <MissionAuthorizationCenter />}
+            {activeTab === 'team-management' && <TeamManagement />}
+            {activeTab === 'resource-management' && <ResourceLogisticsManagement />}
+            {activeTab === 'field-workspace' && <FieldOperationsWorkspace />}
+            {activeTab === 'field-tasks' && <FieldTaskManagement />}
+            {activeTab === 'operations-map' && <OperationsMap />}
+            {activeTab === 'coordination-escalation' && <CoordinationEscalationModule />}
+            {activeTab === 'mission-history' && <MissionHistoryModule />}
 
             {/* MVP 3 AI Intelligence & Decision Support Modules */}
             {activeTab === 'ai-center' && <AIIntelligenceCenter />}

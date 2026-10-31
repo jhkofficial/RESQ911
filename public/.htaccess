@@ -1,0 +1,84 @@
+# ==============================================================================
+# RESQ.911 — Hostinger Web Server Configuration (Apache / LiteSpeed)
+# National Disaster Intelligence & Response Platform
+# ==============================================================================
+
+# 1. Nonaktifkan Directory Listing (Keamanan)
+Options -Indexes
+
+# 2. Pengaturan Default Charset
+AddDefaultCharset UTF-8
+
+# 3. MIME Types untuk Modern Web & Asset Vite
+<IfModule mod_mime.c>
+  AddType application/javascript .js .mjs
+  AddType text/css .css
+  AddType application/json .json
+  AddType image/svg+xml .svg .svgz
+  AddType image/webp .webp
+  AddType font/woff .woff
+  AddType font/woff2 .woff2
+  AddType application/font-woff2 .woff2
+</IfModule>
+
+# 4. Single Page Application (SPA) Routing Rewrite
+# Mengarahkan seluruh URL rute React/Vite ke index.html agar tidak terjadi Error 404 saat refresh
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Jangan rewrite jika file atau direktori fisik benar-benar ada
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Jangan rewrite untuk asset statis yang memang tidak ditemukan (hindari return index.html untuk 404 asset)
+  RewriteCond %{REQUEST_URI} \.(css|js|jpg|jpeg|png|gif|svg|ico|webp|woff|woff2|ttf|map|json)$ [NC]
+  RewriteRule ^ - [L]
+
+  # Arahkan seluruh rute virtual lainnya ke index.html
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# 5. Kompresi Gzip / Deflate (Mempercepat Loading di Hostinger)
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+  AddOutputFilterByType DEFLATE application/javascript application/x-javascript text/javascript
+  AddOutputFilterByType DEFLATE application/json application/xml application/xhtml+xml
+  AddOutputFilterByType DEFLATE image/svg+xml font/woff font/woff2
+</IfModule>
+
+# 6. Browser Caching Rules
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault "access plus 1 month"
+
+  # index.html jangan di-cache lama agar saat Anda update build, user langsung dapat versi terbaru
+  ExpiresByType text/html "access plus 0 seconds"
+
+  # Asset dengan hash (JS, CSS, Font, Gambar) di-cache panjang
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/javascript "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>
+
+# 7. Header Keamanan Standar
+<IfModule mod_headers.c>
+  # Mencegah MIME sniffing
+  Header set X-Content-Type-Options "nosniff"
+  # Menghindari klik bajakan (clickjacking)
+  Header set X-Frame-Options "SAMEORIGIN"
+  # Perlindungan XSS
+  Header set X-XSS-Protection "1; mode=block"
+  # Cache control spesifik untuk HTML vs Assets
+  <FilesMatch "index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+  </FilesMatch>
+</IfModule>

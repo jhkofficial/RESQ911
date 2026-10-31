@@ -45,7 +45,9 @@ export type ReporterType =
 export interface UserProfile {
   id: string;
   name: string;
+  nim: string;
   role: UserRole;
+  position?: string;
   agency: string;
   avatar: string;
   assignedRegion?: string;

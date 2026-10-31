@@ -5,11 +5,20 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Relative base path memungkinkan aplikasi berjalan di root domain (public_html)
+    // maupun di subdirektori (misal domain.com/resq911/) tanpa masalah 404 asset
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
+    },
+    build: {
+      outDir: 'dist',
+      assetsDir: 'assets',
+      sourcemap: false,
+      chunkSizeWarningLimit: 2000,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
@@ -20,3 +29,4 @@ export default defineConfig(() => {
     },
   };
 });
+

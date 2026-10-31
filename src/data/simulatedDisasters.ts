@@ -1,4 +1,4 @@
-import { DisasterIncident, DisasterType, SeverityLevel, VerificationStatus, ResponseStatus, AIEngine } from '../types/disaster';
+import { DisasterIncident, DisasterType, SeverityLevel, VerificationStatus, ResponseStatus, AIEngine, UserProfile } from '../types/disaster';
 
 // Curated Indonesian provinces and regencies with plausible realistic coordinates
 interface LocationSeed {
@@ -703,37 +703,65 @@ export const SIMULATED_AI_ENGINES: AIEngine[] = [
   }
 ];
 
-export const DEMO_USERS = [
+export const DEMO_USERS: UserProfile[] = [
   {
-    id: 'usr-1',
-    name: 'Dr. Raden Haryo Prabowo, M.Sc',
-    role: 'ADMIN_NASIONAL' as const,
+    id: 'usr-johanes',
+    name: 'Johanes Harindrias Kurniawan',
+    nim: '2511600070',
+    role: 'ADMIN_NASIONAL',
+    position: 'Komandan Pengendali Operasi Pusdalops BNPB',
     agency: 'Pusdalops BNPB Pusat — Jakarta',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    assignedRegion: 'Nasional (Seluruh NKRI)'
+  },
+  {
+    id: 'usr-raviez',
+    name: 'Raviez Perdana Putra',
+    nim: '2511600021',
+    role: 'ADMIN_NASIONAL',
+    position: 'Koordinator Logistik & Sumber Daya Nasional',
+    agency: 'Direktorat Logistik & Peralatan BNPB Pusat',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    assignedRegion: 'Nasional (Seluruh Wilayah NKRI)'
+    assignedRegion: 'Nasional (Otoritas Logistik Pusat)'
   },
   {
-    id: 'usr-2',
-    name: 'Ir. Siti Aminah Suryani',
-    role: 'OPERATOR_DAERAH' as const,
+    id: 'usr-rizki',
+    name: 'Rizki Awlia Fadjrin',
+    nim: '2511600104',
+    role: 'OPERATOR_DAERAH',
+    position: 'Kepala Bidang Kedaruratan & Logistik BPBD Jawa Tengah',
     agency: 'BPBD Provinsi Jawa Tengah',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    assignedRegion: 'Jawa Tengah'
-  },
-  {
-    id: 'usr-3',
-    name: 'Kapten Hendra Gunawan',
-    role: 'PETUGAS_LAPANGAN' as const,
-    agency: 'TRC Reaksi Cepat Pos Aju Flores Timur',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    assignedRegion: 'Nusa Tenggara Timur'
+    assignedRegion: 'Jawa Tengah & D.I. Yogyakarta'
   },
   {
-    id: 'usr-4',
-    name: 'Drs. Bambang Sudiro, M.M',
-    role: 'VIEWER_EKSEKUTIF' as const,
-    agency: 'Dewan Pengarah BNPB & Kemenko PMK',
+    id: 'usr-ilham',
+    name: 'Ilham Nur Ramdani',
+    nim: '2511600179',
+    role: 'OPERATOR_DAERAH',
+    position: 'Koordinator Satgas Posko Aju BPBD Jawa Barat',
+    agency: 'BPBD Provinsi Jawa Barat',
+    avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80',
+    assignedRegion: 'Jawa Barat & DKI Jakarta'
+  },
+  {
+    id: 'usr-imdad',
+    name: 'Imdad Gusti',
+    nim: '2511600393',
+    role: 'PETUGAS_LAPANGAN',
+    position: 'Komandan Satgas Reaksi Cepat (TRC) Lapangan',
+    agency: 'Tim Reaksi Cepat (TRC) Basarnas & BNPB',
+    avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
+    assignedRegion: 'Garis Depan Lapangan (Semua Sektor Aktif)'
+  },
+  {
+    id: 'usr-andre',
+    name: 'Andre Oktora',
+    nim: '2511600203',
+    role: 'VIEWER_EKSEKUTIF',
+    position: 'Tim Evaluator & Pengarah Eksekutif Kebijakan Penanggulangan',
+    agency: 'Kemenko Pembangunan Manusia dan Kebudayaan (PMK)',
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
-    assignedRegion: 'Nasional (Dashboard Eksekutif)'
+    assignedRegion: 'Nasional (Dashboard Pengawasan Eksekutif)'
   }
 ];

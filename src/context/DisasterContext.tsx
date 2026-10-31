@@ -49,6 +49,36 @@ import {
 } from '../data/simulatedIntelligence';
 import { validateIncidentReport } from '../utils/validation';
 import { findPotentialDuplicates, evaluateReportSimilarity } from '../utils/duplicateDetection';
+import {
+  ResponseMission,
+  MissionTask,
+  SimulatedTeam,
+  ResourceInventory,
+  ResourceAllocation,
+  FieldUpdate,
+  MissionApproval,
+  MissionEscalation,
+  MissionAuditLog,
+  CoordinationMessage,
+  TaskStatus,
+  EscalationCategory
+} from '../types/operations';
+import {
+  INITIAL_SIMULATED_TEAMS,
+  INITIAL_RESOURCE_INVENTORY,
+  INITIAL_RESPONSE_MISSIONS,
+  INITIAL_MISSION_TASKS,
+  INITIAL_FIELD_UPDATES,
+  INITIAL_MISSION_ESCALATIONS,
+  INITIAL_MISSION_AUDIT_LOGS,
+  INITIAL_COORDINATION_MESSAGES
+} from '../data/simulatedOperations';
+import {
+  calculateOperationsMetrics,
+  validateResourceAllocation,
+  recommendTeamsForMission,
+  detectOperationalConflicts
+} from '../utils/operationsEngine';
 
 interface DisasterContextType {
   // Incidents (Verified / Active)
@@ -171,11 +201,85 @@ interface DisasterContextType {
   generateSituationSummary: (incidentId: string) => Promise<SituationSummaryResult>;
   loadDemoScenario: (key: 'A' | 'B' | 'C' | 'D') => void;
 
+  // MVP 4 Response Orchestration & Field Operations
+  missions: ResponseMission[];
+  tasks: MissionTask[];
+  teams: SimulatedTeam[];
+  inventory: ResourceInventory[];
+  fieldUpdates: FieldUpdate[];
+  escalations: MissionEscalation[];
+  auditLogs: MissionAuditLog[];
+  coordinationMessages: CoordinationMessage[];
+  operationsMetrics: {
+    totalMissions: number;
+    activeMissions: number;
+    pendingAuthorization: number;
+    completedMissions: number;
+    draftMissions: number;
+    deployedTeams: number;
+    availableTeams: number;
+    lowStockResources: number;
+    openEscalations: number;
+    totalTasks: number;
+    completedTasks: number;
+    inProgressTasks: number;
+    blockedTasks: number;
+  };
+
+  // MVP 4 Operations Methods
+  createMission: (missionData: Partial<ResponseMission>) => { success: boolean; mission?: ResponseMission; error?: string };
+  updateMission: (missionId: string, updates: Partial<ResponseMission>) => { success: boolean; error?: string };
+  authorizeMission: (
+    missionId: string,
+    decision: 'Authorized' | 'Revision Required' | 'Rejected',
+    notes: string,
+    checklist?: any
+  ) => { success: boolean; error?: string };
+  assignTeamToMission: (missionId: string, teamId: string) => { success: boolean; error?: string };
+  removeTeamFromMission: (missionId: string, teamId: string) => { success: boolean; error?: string };
+  allocateResourceToMission: (
+    missionId: string,
+    resourceId: string,
+    quantity: number
+  ) => { success: boolean; error?: string };
+  returnAllocatedResource: (
+    missionId: string,
+    resourceId: string,
+    quantity: number
+  ) => { success: boolean; error?: string };
+  updateTaskStatus: (
+    taskId: string,
+    status: TaskStatus,
+    progress: number,
+    blockers?: string[]
+  ) => { success: boolean; error?: string };
+  createTask: (taskData: Partial<MissionTask>) => { success: boolean; task?: MissionTask; error?: string };
+  submitFieldReport: (
+    reportData: Omit<FieldUpdate, 'update_id' | 'timestamp' | 'reporter_id' | 'reporter_name' | 'reporter_role'>
+  ) => { success: boolean; update?: FieldUpdate; error?: string };
+  raiseEscalation: (
+    escalationData: {
+      mission_id: string;
+      category: EscalationCategory;
+      description: string;
+      priority: 'Kritis' | 'Tinggi' | 'Sedang';
+    }
+  ) => { success: boolean; escalation?: MissionEscalation; error?: string };
+  resolveEscalation: (escalationId: string, resolutionNotes: string) => { success: boolean; error?: string };
+  sendCoordinationMessage: (
+    channel: 'Komando Nasional' | 'Sektor Lapangan' | 'Logistik & Armada' | 'Medis & SAR',
+    content: string,
+    isUrgent?: boolean,
+    missionId?: string
+  ) => { success: boolean };
+
   // Shell methods
   setActiveTab: (tab: string) => void;
   setTimeZone: (tz: 'WIB' | 'WITA' | 'WIT') => void;
   setMapLayers: (layers: { showVerifiedIncidents: boolean; showUnverifiedReports: boolean }) => void;
   loginAsRole: (role: UserRole) => void;
+  loginAsUser: (user: UserProfile) => void;
+  loginByNim: (nim: string) => { success: boolean; user?: UserProfile; error?: string };
   logout: () => void;
   exportDataAsJSON: () => void;
   exportDataAsCSV: () => void;
@@ -265,8 +369,105 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [activeReport, setActiveReport] = useState<IncidentReport | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [timeZone, setTimeZone] = useState<'WIB' | 'WITA' | 'WIT'>('WIB');
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<UserProfile>(DEMO_USERS[0]);
+
+  // MVP 4 Operations States
+  const [missions, setMissions] = useState<ResponseMission[]>(() => {
+    const saved = localStorage.getItem('resq911_missions_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved missions', e);
+      }
+    }
+    return INITIAL_RESPONSE_MISSIONS;
+  });
+
+  const [tasks, setTasks] = useState<MissionTask[]>(() => {
+    const saved = localStorage.getItem('resq911_tasks_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved tasks', e);
+      }
+    }
+    return INITIAL_MISSION_TASKS;
+  });
+
+  const [teams, setTeams] = useState<SimulatedTeam[]>(() => {
+    const saved = localStorage.getItem('resq911_teams_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved teams', e);
+      }
+    }
+    return INITIAL_SIMULATED_TEAMS;
+  });
+
+  const [inventory, setInventory] = useState<ResourceInventory[]>(() => {
+    const saved = localStorage.getItem('resq911_inventory_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved inventory', e);
+      }
+    }
+    return INITIAL_RESOURCE_INVENTORY;
+  });
+
+  const [fieldUpdates, setFieldUpdates] = useState<FieldUpdate[]>(() => {
+    const saved = localStorage.getItem('resq911_fupdates_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved field updates', e);
+      }
+    }
+    return INITIAL_FIELD_UPDATES;
+  });
+
+  const [escalations, setEscalations] = useState<MissionEscalation[]>(() => {
+    const saved = localStorage.getItem('resq911_escalations_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved escalations', e);
+      }
+    }
+    return INITIAL_MISSION_ESCALATIONS;
+  });
+
+  const [auditLogs, setAuditLogs] = useState<MissionAuditLog[]>(() => {
+    const saved = localStorage.getItem('resq911_audit_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved audit logs', e);
+      }
+    }
+    return INITIAL_MISSION_AUDIT_LOGS;
+  });
+
+  const [coordinationMessages, setCoordinationMessages] = useState<CoordinationMessage[]>(() => {
+    const saved = localStorage.getItem('resq911_coord_mvp4');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved messages', e);
+      }
+    }
+    return INITIAL_COORDINATION_MESSAGES;
+  });
 
   // Map layer controls
   const [mapLayers, setMapLayers] = useState({
@@ -547,6 +748,60 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       latestAnalysisTimestamp,
     };
   }, [incidents, riskAssessments, recommendations, aiAnalysisRuns]);
+
+  // MVP 4 Operations Metrics
+  const operationsMetrics = useMemo(() => {
+    return calculateOperationsMetrics(missions, tasks, teams, inventory, escalations);
+  }, [missions, tasks, teams, inventory, escalations]);
+
+  // Persist MVP 4 state changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_missions_mvp4', JSON.stringify(missions));
+    } catch (e) {}
+  }, [missions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_tasks_mvp4', JSON.stringify(tasks));
+    } catch (e) {}
+  }, [tasks]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_teams_mvp4', JSON.stringify(teams));
+    } catch (e) {}
+  }, [teams]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_inventory_mvp4', JSON.stringify(inventory));
+    } catch (e) {}
+  }, [inventory]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_fupdates_mvp4', JSON.stringify(fieldUpdates));
+    } catch (e) {}
+  }, [fieldUpdates]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_escalations_mvp4', JSON.stringify(escalations));
+    } catch (e) {}
+  }, [escalations]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_audit_mvp4', JSON.stringify(auditLogs));
+    } catch (e) {}
+  }, [auditLogs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resq911_coord_mvp4', JSON.stringify(coordinationMessages));
+    } catch (e) {}
+  }, [coordinationMessages]);
 
   // Incident methods
   const setFilters = (update: Partial<FilterState>) => {
@@ -967,8 +1222,580 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsLoggedIn(true);
   };
 
+  const loginAsUser = (user: UserProfile) => {
+    setCurrentUser(user);
+    setIsLoggedIn(true);
+  };
+
+  const loginByNim = (nim: string): { success: boolean; user?: UserProfile; error?: string } => {
+    const cleanNim = nim.trim();
+    const found = DEMO_USERS.find((u) => u.nim === cleanNim || u.nim.includes(cleanNim));
+    if (found) {
+      setCurrentUser(found);
+      setIsLoggedIn(true);
+      return { success: true, user: found };
+    }
+    return {
+      success: false,
+      error: `Pengguna dengan NIM "${nim}" tidak terdaftar dalam basis data personel komando. Silakan pilih dari daftar 6 personel resmi.`
+    };
+  };
+
   const logout = () => {
     setIsLoggedIn(false);
+  };
+
+  // MVP 4 Operations Methods
+  const createMission = (missionData: Partial<ResponseMission>): { success: boolean; mission?: ResponseMission; error?: string } => {
+    if (currentUser.role === 'VIEWER_EKSEKUTIF') {
+      return { success: false, error: 'Akses Ditolak: Viewer Eksekutif hanya memiliki hak baca.' };
+    }
+    const newId = `MSN-2026-0${100 + missions.length + 1}`;
+    const newMission: ResponseMission = {
+      mission_id: newId,
+      incident_id: missionData.incident_id || 'RSQ-2026-0001',
+      recommendation_id: missionData.recommendation_id,
+      title: missionData.title || `Operasi Tanggap Darurat ${newId}`,
+      disaster_type: missionData.disaster_type || 'Banjir',
+      province: missionData.province || 'Jawa Tengah',
+      regency: missionData.regency || 'Demak',
+      subdistrict: missionData.subdistrict || 'Karanganyar',
+      location_name: missionData.location_name || 'Sektor Tanggap Darurat',
+      latitude: missionData.latitude || -6.8921,
+      longitude: missionData.longitude || 110.7421,
+      objective: missionData.objective || 'Pelaksanaan operasi penyelamatan dan perlindungan pengungsi.',
+      proposed_actions: missionData.proposed_actions || ['Penyelamatan warga terdampak', 'Pengamanan posko shelter'],
+      priority: missionData.priority || 'Tinggi',
+      estimated_start: missionData.estimated_start || new Date().toISOString(),
+      estimated_end: missionData.estimated_end || new Date(Date.now() + 86400000 * 5).toISOString(),
+      required_capabilities: missionData.required_capabilities || ['Water Rescue', 'Pertolongan Pertama'],
+      required_team_size: missionData.required_team_size || 20,
+      required_resources_summary: missionData.required_resources_summary || ['2x Perahu Karet LCR', '1x Tenda Peleton'],
+      known_constraints: missionData.known_constraints || ['Akses jalan tergenang air'],
+      planning_notes: missionData.planning_notes || 'Draf operasi disusun melalui sistem RESQ.911.',
+      created_by: `${currentUser.name} (${currentUser.nim || ''})`,
+      created_by_nim: currentUser.nim,
+      created_at: new Date().toISOString(),
+      status: missionData.status || 'Pending Authorization',
+      assigned_team_ids: missionData.assigned_team_ids || [],
+      allocated_resource_ids: missionData.allocated_resource_ids || [],
+      progress_percentage: 0,
+      target_victims_evacuated: missionData.target_victims_evacuated || 500,
+      actual_victims_evacuated: 0
+    };
+
+    setMissions((prev) => [newMission, ...prev]);
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: newId,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'CREATE_MISSION',
+      previous_state: 'NONE',
+      new_state: newMission.status,
+      timestamp: new Date().toISOString(),
+      notes: `Perencanaan misi "${newMission.title}" dibuat dengan status ${newMission.status}.`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true, mission: newMission };
+  };
+
+  const updateMission = (missionId: string, updates: Partial<ResponseMission>): { success: boolean; error?: string } => {
+    if (currentUser.role === 'VIEWER_EKSEKUTIF') {
+      return { success: false, error: 'Akses Ditolak: Viewer Eksekutif hanya memiliki hak baca.' };
+    }
+    const target = missions.find((m) => m.mission_id === missionId);
+    if (!target) return { success: false, error: 'Misi tidak ditemukan' };
+
+    const updated = { ...target, ...updates };
+    setMissions((prev) => prev.map((m) => (m.mission_id === missionId ? updated : m)));
+
+    if (updates.status && updates.status !== target.status) {
+      const newAudit: MissionAuditLog = {
+        log_id: `AUD-${Date.now().toString().slice(-6)}`,
+        mission_id: missionId,
+        actor_id: currentUser.id,
+        actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+        actor_role: currentUser.role,
+        action: 'UPDATE_MISSION_STATUS',
+        previous_state: target.status,
+        new_state: updates.status,
+        timestamp: new Date().toISOString(),
+        notes: `Status misi diperbarui menjadi "${updates.status}".`
+      };
+      setAuditLogs((prev) => [newAudit, ...prev]);
+    }
+
+    return { success: true };
+  };
+
+  const authorizeMission = (
+    missionId: string,
+    decision: 'Authorized' | 'Revision Required' | 'Rejected',
+    notes: string,
+    checklist?: any
+  ): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'ADMIN_NASIONAL' && currentUser.role !== 'OPERATOR_DAERAH') {
+      return {
+        success: false,
+        error: 'Akses Ditolak: Otorisasi misi tanggap darurat hanya dapat dilakukan oleh Administrator Nasional atau Operator Daerah.'
+      };
+    }
+
+    const target = missions.find((m) => m.mission_id === missionId);
+    if (!target) return { success: false, error: 'Misi tidak ditemukan' };
+
+    let newStatus = target.status;
+    if (decision === 'Authorized') newStatus = 'Authorized';
+    else if (decision === 'Revision Required') newStatus = 'Pending Authorization';
+    else if (decision === 'Rejected') newStatus = 'Cancelled';
+
+    const updated: ResponseMission = {
+      ...target,
+      status: newStatus,
+      approved_by: `${currentUser.name} (${currentUser.nim || ''})`,
+      approved_by_role: currentUser.role,
+      approved_at: new Date().toISOString(),
+      approval_notes: notes
+    };
+
+    setMissions((prev) => prev.map((m) => (m.mission_id === missionId ? updated : m)));
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: missionId,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: decision === 'Authorized' ? 'AUTHORIZE_MISSION' : decision === 'Revision Required' ? 'REQUEST_REVISION' : 'REJECT_MISSION',
+      previous_state: target.status,
+      new_state: newStatus,
+      timestamp: new Date().toISOString(),
+      notes: `Keputusan otorisasi: ${decision}. Catatan: ${notes}`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true };
+  };
+
+  const assignTeamToMission = (missionId: string, teamId: string): { success: boolean; error?: string } => {
+    if (currentUser.role === 'VIEWER_EKSEKUTIF') {
+      return { success: false, error: 'Akses Ditolak: Viewer Eksekutif hanya memiliki hak baca.' };
+    }
+    const mission = missions.find((m) => m.mission_id === missionId);
+    if (!mission) return { success: false, error: 'Misi tidak ditemukan' };
+    const team = teams.find((t) => t.team_id === teamId);
+    if (!team) return { success: false, error: 'Tim tidak ditemukan' };
+
+    if (mission.assigned_team_ids.includes(teamId)) {
+      return { success: false, error: 'Tim ini sudah ditugaskan pada misi tersebut.' };
+    }
+
+    const updatedTeamIds = [...mission.assigned_team_ids, teamId];
+    setMissions((prev) =>
+      prev.map((m) =>
+        m.mission_id === missionId
+          ? {
+              ...m,
+              assigned_team_ids: updatedTeamIds,
+              status: m.status === 'Authorized' || m.status === 'Draft' ? 'In Progress' : m.status
+            }
+          : m
+      )
+    );
+
+    setTeams((prev) =>
+      prev.map((t) =>
+        t.team_id === teamId
+          ? {
+              ...t,
+              availability: 'Assigned',
+              current_assignment_mission_id: missionId,
+              last_status_update: 'Baru saja'
+            }
+          : t
+      )
+    );
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: missionId,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'ASSIGN_TEAM',
+      previous_state: team.availability,
+      new_state: 'Assigned',
+      timestamp: new Date().toISOString(),
+      notes: `Tim "${team.team_name}" ditugaskan ke misi ${missionId}.`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true };
+  };
+
+  const removeTeamFromMission = (missionId: string, teamId: string): { success: boolean; error?: string } => {
+    if (currentUser.role === 'VIEWER_EKSEKUTIF') {
+      return { success: false, error: 'Akses Ditolak: Viewer Eksekutif hanya memiliki hak baca.' };
+    }
+    setMissions((prev) =>
+      prev.map((m) =>
+        m.mission_id === missionId
+          ? {
+              ...m,
+              assigned_team_ids: m.assigned_team_ids.filter((id) => id !== teamId)
+            }
+          : m
+      )
+    );
+
+    setTeams((prev) =>
+      prev.map((t) =>
+        t.team_id === teamId
+          ? {
+              ...t,
+              availability: 'Available',
+              current_assignment_mission_id: undefined,
+              last_status_update: 'Tersedia kembali'
+            }
+          : t
+      )
+    );
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: missionId,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'RELEASE_TEAM',
+      previous_state: 'Assigned',
+      new_state: 'Available',
+      timestamp: new Date().toISOString(),
+      notes: `Tim ${teamId} dilepas dari misi ${missionId}.`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true };
+  };
+
+  const allocateResourceToMission = (
+    missionId: string,
+    resourceId: string,
+    quantity: number
+  ): { success: boolean; error?: string } => {
+    if (currentUser.role === 'VIEWER_EKSEKUTIF') {
+      return { success: false, error: 'Akses Ditolak: Viewer Eksekutif hanya memiliki hak baca.' };
+    }
+    const mission = missions.find((m) => m.mission_id === missionId);
+    if (!mission) return { success: false, error: 'Misi tidak ditemukan' };
+
+    const inv = inventory.find((r) => r.resource_id === resourceId);
+    if (!inv) return { success: false, error: 'Item sumber daya tidak terdaftar dalam inventori.' };
+
+    if (quantity <= 0) return { success: false, error: 'Kuantitas alokasi harus lebih dari 0.' };
+    if (quantity > inv.quantity_available) {
+      return {
+        success: false,
+        error: `Stok tidak mencukupi: Permintaan (${quantity} ${inv.unit}) melebihi sisa stok tersedia (${inv.quantity_available} ${inv.unit}).`
+      };
+    }
+
+    setInventory((prev) =>
+      prev.map((item) =>
+        item.resource_id === resourceId
+          ? {
+              ...item,
+              quantity_available: item.quantity_available - quantity,
+              quantity_assigned: item.quantity_assigned + quantity,
+              last_updated: 'Baru saja'
+            }
+          : item
+      )
+    );
+
+    setMissions((prev) =>
+      prev.map((m) =>
+        m.mission_id === missionId
+          ? {
+              ...m,
+              allocated_resource_ids: m.allocated_resource_ids.includes(resourceId)
+                ? m.allocated_resource_ids
+                : [...m.allocated_resource_ids, resourceId]
+            }
+          : m
+      )
+    );
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: missionId,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'ALLOCATE_RESOURCE',
+      previous_state: `${inv.quantity_available} ${inv.unit}`,
+      new_state: `${inv.quantity_available - quantity} ${inv.unit}`,
+      timestamp: new Date().toISOString(),
+      notes: `Alokasi ${quantity} ${inv.unit} ${inv.resource_name} untuk misi ${missionId}.`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true };
+  };
+
+  const returnAllocatedResource = (
+    missionId: string,
+    resourceId: string,
+    quantity: number
+  ): { success: boolean; error?: string } => {
+    const inv = inventory.find((r) => r.resource_id === resourceId);
+    if (!inv) return { success: false, error: 'Sumber daya tidak ditemukan' };
+
+    setInventory((prev) =>
+      prev.map((item) =>
+        item.resource_id === resourceId
+          ? {
+              ...item,
+              quantity_available: item.quantity_available + quantity,
+              quantity_assigned: Math.max(0, item.quantity_assigned - quantity),
+              last_updated: 'Baru saja'
+            }
+          : item
+      )
+    );
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: missionId,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'RETURN_RESOURCE',
+      previous_state: `${inv.quantity_available} ${inv.unit}`,
+      new_state: `${inv.quantity_available + quantity} ${inv.unit}`,
+      timestamp: new Date().toISOString(),
+      notes: `Pengembalian ${quantity} ${inv.unit} ${inv.resource_name} ke gudang.`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true };
+  };
+
+  const updateTaskStatus = (
+    taskId: string,
+    status: TaskStatus,
+    progress: number,
+    blockers?: string[]
+  ): { success: boolean; error?: string } => {
+    const targetTask = tasks.find((t) => t.task_id === taskId);
+    if (!targetTask) return { success: false, error: 'Tugas operasional tidak ditemukan' };
+
+    const updatedTask: MissionTask = {
+      ...targetTask,
+      task_status: status,
+      progress_percentage: Math.min(100, Math.max(0, progress)),
+      blockers: blockers !== undefined ? blockers : targetTask.blockers,
+      last_updated: 'Baru saja',
+      actual_start: status === 'In Progress' && !targetTask.actual_start ? new Date().toISOString() : targetTask.actual_start,
+      actual_end: status === 'Completed' ? new Date().toISOString() : targetTask.actual_end
+    };
+
+    setTasks((prev) => prev.map((t) => (t.task_id === taskId ? updatedTask : t)));
+
+    // Update parent mission progress
+    const relatedTasks = tasks.map((t) => (t.task_id === taskId ? updatedTask : t)).filter((t) => t.mission_id === targetTask.mission_id);
+    if (relatedTasks.length > 0) {
+      const avgProgress = Math.round(
+        relatedTasks.reduce((acc, t) => acc + t.progress_percentage, 0) / relatedTasks.length
+      );
+      setMissions((prev) =>
+        prev.map((m) =>
+          m.mission_id === targetTask.mission_id
+            ? {
+                ...m,
+                progress_percentage: avgProgress,
+                status: avgProgress === 100 ? 'Completed' : m.status
+              }
+            : m
+        )
+      );
+    }
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: targetTask.mission_id,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'UPDATE_TASK',
+      previous_state: `${targetTask.task_status} (${targetTask.progress_percentage}%)`,
+      new_state: `${status} (${progress}%)`,
+      timestamp: new Date().toISOString(),
+      notes: `Tugas "${targetTask.task_title}" diperbarui.`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true };
+  };
+
+  const createTask = (taskData: Partial<MissionTask>): { success: boolean; task?: MissionTask; error?: string } => {
+    if (!taskData.mission_id) return { success: false, error: 'ID Misi harus disertakan' };
+    const newTask: MissionTask = {
+      task_id: `TSK-${Date.now().toString().slice(-6)}`,
+      mission_id: taskData.mission_id,
+      task_title: taskData.task_title || 'Tugas Baru Lapangan',
+      description: taskData.description || 'Deskripsi tugas operasional tanggap darurat.',
+      assigned_team_id: taskData.assigned_team_id,
+      assigned_team_name: taskData.assigned_team_name,
+      priority: taskData.priority || 'Tinggi',
+      planned_start: taskData.planned_start || new Date().toISOString(),
+      planned_end: taskData.planned_end || new Date(Date.now() + 86400000).toISOString(),
+      task_status: 'Assigned',
+      progress_percentage: 0,
+      blockers: [],
+      last_updated: 'Baru saja',
+      location_label: taskData.location_label || 'Sektor Utama',
+      required_skill: taskData.required_skill || 'Water Rescue'
+    };
+
+    setTasks((prev) => [newTask, ...prev]);
+    return { success: true, task: newTask };
+  };
+
+  const submitFieldReport = (
+    reportData: Omit<FieldUpdate, 'update_id' | 'timestamp' | 'reporter_id' | 'reporter_name' | 'reporter_role'>
+  ): { success: boolean; update?: FieldUpdate; error?: string } => {
+    const newUpdate: FieldUpdate = {
+      ...reportData,
+      update_id: `FUP-${Date.now().toString().slice(-6)}`,
+      reporter_id: currentUser.id,
+      reporter_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      reporter_role: currentUser.role,
+      timestamp: new Date().toISOString(),
+      verification_status: 'Diverifikasi Posko'
+    };
+
+    setFieldUpdates((prev) => [newUpdate, ...prev]);
+
+    if (reportData.task_id) {
+      updateTaskStatus(reportData.task_id, 'In Progress', reportData.progress_percentage);
+    }
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: reportData.mission_id,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'SUBMIT_FIELD_UPDATE',
+      previous_state: 'Laporan Lapangan',
+      new_state: `${reportData.progress_percentage}% Selesai`,
+      timestamp: new Date().toISOString(),
+      notes: `Laporan situasi lapangan: ${reportData.situation_description.slice(0, 100)}...`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true, update: newUpdate };
+  };
+
+  const raiseEscalation = (escalationData: {
+    mission_id: string;
+    category: EscalationCategory;
+    description: string;
+    priority: 'Kritis' | 'Tinggi' | 'Sedang';
+  }): { success: boolean; escalation?: MissionEscalation; error?: string } => {
+    const mission = missions.find((m) => m.mission_id === escalationData.mission_id);
+    const newEsc: MissionEscalation = {
+      escalation_id: `ESC-${Date.now().toString().slice(-6)}`,
+      mission_id: escalationData.mission_id,
+      mission_title: mission?.title || `Misi ${escalationData.mission_id}`,
+      raised_by: `${currentUser.name} (${currentUser.nim || ''})`,
+      raised_by_role: currentUser.role,
+      category: escalationData.category,
+      description: escalationData.description,
+      priority: escalationData.priority,
+      status: 'Open',
+      created_at: new Date().toISOString()
+    };
+
+    setEscalations((prev) => [newEsc, ...prev]);
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: escalationData.mission_id,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'RAISE_ESCALATION',
+      previous_state: 'Normal',
+      new_state: `Eskalasi ${escalationData.category}`,
+      timestamp: new Date().toISOString(),
+      notes: `Kendala darurat dilaporkan: ${escalationData.description}`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true, escalation: newEsc };
+  };
+
+  const resolveEscalation = (escalationId: string, resolutionNotes: string): { success: boolean; error?: string } => {
+    const esc = escalations.find((e) => e.escalation_id === escalationId);
+    if (!esc) return { success: false, error: 'Eskalasi tidak ditemukan' };
+
+    setEscalations((prev) =>
+      prev.map((e) =>
+        e.escalation_id === escalationId
+          ? {
+              ...e,
+              status: 'Resolved',
+              resolved_at: new Date().toISOString(),
+              resolution_notes: resolutionNotes,
+              owner_name: `${currentUser.name} (${currentUser.nim || ''})`
+            }
+          : e
+      )
+    );
+
+    const newAudit: MissionAuditLog = {
+      log_id: `AUD-${Date.now().toString().slice(-6)}`,
+      mission_id: esc.mission_id,
+      actor_id: currentUser.id,
+      actor_name: `${currentUser.name} (${currentUser.nim || ''})`,
+      actor_role: currentUser.role,
+      action: 'RESOLVE_ESCALATION',
+      previous_state: esc.status,
+      new_state: 'Resolved',
+      timestamp: new Date().toISOString(),
+      notes: `Eskalasi diselesaikan: ${resolutionNotes}`
+    };
+    setAuditLogs((prev) => [newAudit, ...prev]);
+
+    return { success: true };
+  };
+
+  const sendCoordinationMessage = (
+    channel: 'Komando Nasional' | 'Sektor Lapangan' | 'Logistik & Armada' | 'Medis & SAR',
+    content: string,
+    isUrgent?: boolean,
+    missionId?: string
+  ): { success: boolean } => {
+    const newMsg: CoordinationMessage = {
+      message_id: `MSG-${Date.now().toString().slice(-6)}`,
+      mission_id: missionId,
+      sender_id: currentUser.id,
+      sender_name: currentUser.name,
+      sender_nim: currentUser.nim,
+      sender_role: currentUser.role,
+      timestamp: new Date().toISOString(),
+      channel,
+      content,
+      is_urgent: isUrgent
+    };
+    setCoordinationMessages((prev) => [...prev, newMsg]);
+    return { success: true };
   };
 
   const resetToInitialData = () => {
@@ -1498,7 +2325,32 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setActiveTab,
         setTimeZone,
         setMapLayers,
+        // MVP 4 Operations State & Metrics
+        missions,
+        tasks,
+        teams,
+        inventory,
+        fieldUpdates,
+        escalations,
+        auditLogs,
+        coordinationMessages,
+        operationsMetrics,
+        createMission,
+        updateMission,
+        authorizeMission,
+        assignTeamToMission,
+        removeTeamFromMission,
+        allocateResourceToMission,
+        returnAllocatedResource,
+        updateTaskStatus,
+        createTask,
+        submitFieldReport,
+        raiseEscalation,
+        resolveEscalation,
+        sendCoordinationMessage,
         loginAsRole,
+        loginAsUser,
+        loginByNim,
         logout,
         exportDataAsJSON,
         exportDataAsCSV,
